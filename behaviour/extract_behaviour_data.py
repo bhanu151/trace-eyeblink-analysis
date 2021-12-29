@@ -46,6 +46,8 @@ def extract_data_lines(frame_stack, fmt="%Y-%m-%dT%H:%M:%S.%f"):
             t_phase.append(1)
         elif tokens[10] == 'CS+':
             t_phase.append(2)
+        elif tokens[10] == 'NOCS':
+            t_phase.append(2)
         elif tokens[10] == 'TRAC':
             t_phase.append(3)
         elif tokens[10] == 'PUFF': 
@@ -54,6 +56,8 @@ def extract_data_lines(frame_stack, fmt="%Y-%m-%dT%H:%M:%S.%f"):
             t_phase.append(4)
             prob = 1
         elif tokens[10] == 'POST':
+            t_phase.append(5)
+        elif tokens[10] == 'NONE':
             t_phase.append(5)
         else:
             t_phase.append(math.nan)
