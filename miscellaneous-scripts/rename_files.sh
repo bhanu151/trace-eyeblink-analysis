@@ -26,10 +26,20 @@ do
     do
       cd $session
       pwd
-      echo $(ls G*.tif | wc -l)
-      mmv \*_Trial-\[0-9]-\*.tif \#1_Trial-0\#2-\#3.tif
-      mmv \*_Trial-\[0-9]-\*.xls \#1_Trial-0\#2-\#3.xls
-      echo $(ls G*.tif | wc -l)
+      if [[ $animal =~ .*G[0-9].* ]]; then 
+        echo $(ls G*.tif | wc -l)
+        mmv \*_Trial-\[0-9]-\*.tif \#1_Trial-0\#2-\#3.tif
+        mmv \*_Trial-\[0-9]-\*.xls \#1_Trial-0\#2-\#3.xls
+        echo $(ls G*.tif | wc -l)
+      fi
+      if [[ $animal =~ .*g[0-9].* ]]; then 
+        echo $(ls *.tif* | wc -l)
+        mmv Trial\[0-9]-\*.tif Trial-0\#1-\#2.tif
+        mmv Trial\[0-9]-\*.xls Trial-0\#1-\#2.xls
+        mmv Trial\[0-9]\[0-9]-\*.tif Trial-\#1\#2-\#3.tif
+        mmv Trial\[0-9]\[0-9]-\*.xls Trial-\#1\#2-\#3.xls
+        echo $(ls *.tif* | wc -l)
+      fi
     done
   done
 done
