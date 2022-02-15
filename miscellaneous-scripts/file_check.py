@@ -9,59 +9,66 @@ import pandas as pd
 
 
 def csv_with_imaging(csv_path, imaging_path, animals):
-    print("##################################################")
-    print("CSV WITH IMAGING")
-    print("##################################################")
+    print('##################################################')
+    print('CSV WITH IMAGING')
+    print('##################################################')
 
     for animal_name in animals:
         csv_data = pd.read_csv(
-            csv_path + "/" + animal_name + ".csv",
+            csv_path + '/' + animal_name + '.csv',
             dtype={
-                "upi": np.int64,
-                "date": str,
-                "experiment_number": str,
-                "num_imaging_trials": np.int64,
+                'upi': np.int64,
+                'date': str,
+                'experiment_number': str,
+                'num_imaging_trials': np.int64,
             },
         )
 
-        print("--------------------------------------------------")
+        print('--------------------------------------------------')
         print(animal_name)
-        print("--------------------------------------------------")
+        print('--------------------------------------------------')
 
         # for index, row in csv_data.iterrows():
         #     print(
-        #         row["upi"],
-        #         row["date"],
-        #         row["experiment_number"],
-        #         row["num_imaging_trials"],
+        #         row['upi'],
+        #         row['date'],
+        #         row['experiment_number'],
+        #         row['num_imaging_trials'],
         #     )
-        num_sessions_path = len(
-            glob.glob(imaging_path + "/" + animal_name + "/20*/[0-9]")
+        sessions_path = glob.glob(
+            imaging_path + '/' + animal_name + '/20*/[0-9]'
         )
-        num_sessions_csv = len(csv_data[csv_data["num_imaging_trials"] > 0])
-        if num_sessions_path != num_sessions_csv:
-            print("ERROR: Mismatch in #imaging_sessions")
-            print(f"csv shows {num_sessions_csv} sessions")
-            print(f"path shows {num_sessions_path} sessions")
+        for index, session in csv_data.iterrows():
+            if session['date'] not in sessions_path:
+                print(f"ERROR: Imaging session {session['date']} not found")
 
+
+
+            
+        # num_sessions_csv = len(csv_data[csv_data['num_imaging_trials'] > 0])
+        # if num_sessions_path != num_sessions_csv:
+        #     print('ERROR: Mismatch in #imaging_sessions')
+        #     print(f'csv shows {num_sessions_csv} sessions')
+        #     print(f'path shows {num_sessions_path} sessions')
+        #
         #     imaging_dir = (
         #         imaging_path
-        #         + "/"
+        #         + '/'
         #         + animal_name
-        #         + "/"
+        #         + '/'
         #         + date
-        #         + "/"
+        #         + '/'
         #         + experiment_number
         #     )
         #
-        #     print("**************************************************")
-        #     print(date + "/" + experiment_number)
-        #     print("**************************************************")
+        #     print('**************************************************')
+        #     print(date + '/' + experiment_number)
+        #     print('**************************************************')
         #
-        #     trial_files = sorted(glob.glob(imaging_dir + "/*.tif"))
+        #     trial_files = sorted(glob.glob(imaging_dir + '/*.tif'))
         #     if len(trial_files) != num_imaging_trials:
         #         print(len(trial_files), num_imaging_trials)
-        #         print("SESSION_ERROR: Mismatch in number of tiff files")
+        #         print('SESSION_ERROR: Mismatch in number of tiff files')
         #     file_sizes = []
         #     for t, trial_file in enumerate(trial_files):
         #         file_sizes.append(os.stat(trial_file).st_size)
@@ -74,13 +81,13 @@ def csv_with_imaging(csv_path, imaging_path, animals):
         #         )[0]
         #         for et in error_t:
         #             print(
-        #                 "TRIAL_ERROR: "
+        #                 'TRIAL_ERROR: '
         #                 + trial_files[et]
-        #                 + " file size ("
+        #                 + ' file size ('
         #                 + str(file_sizes[et])
-        #                 + " bytes) not close to mean ("
+        #                 + ' bytes) not close to mean ('
         #                 + str(mean_file_size)
-        #                 + " bytes)"
+        #                 + ' bytes)'
         #             )
         #
         #     print()
@@ -91,57 +98,63 @@ def csv_with_imaging(csv_path, imaging_path, animals):
 
 
 def csv_with_behaviour(csv_path, behaviour_path, animals):
-    print("##################################################")
-    print("CSV WITH BEHAVIOUR")
-    print("##################################################")
+    print('##################################################')
+    print('CSV WITH BEHAVIOUR')
+    print('##################################################')
 
     for animal_name in animals:
         csv_data = pd.read_csv(
-            csv_path + "/" + animal_name + ".csv",
+            csv_path + '/' + animal_name + '.csv',
             dtype={
-                "upi": np.int64,
-                "date": str,
-                "experiment_number": str,
-                "num_behaviour_trials": np.int64,
+                'upi': np.int64,
+                'date': str,
+                'experiment_number': str,
+                'num_behaviour_trials': np.int64,
             },
         )
 
-        print("--------------------------------------------------")
+        print('--------------------------------------------------')
         print(animal_name)
-        print("--------------------------------------------------")
+        print('--------------------------------------------------')
 
         # for index, row in csv_data.iterrows():
         #     print(
-        #         row["upi"],
-        #         row["date"],
-        #         row["experiment_number"],
-        #         row["num_imaging_trials"],
+        #         row['upi'],
+        #         row['date'],
+        #         row['experiment_number'],
+        #         row['num_imaging_trials'],
         #     )
-        num_sessions_path = len(glob.glob(behaviour_path + "/" + animal_name + "/*"))
-        num_sessions_csv = len(csv_data[csv_data["num_behaviour_trials"] > 0])
-        if num_sessions_path != num_sessions_csv:
-            print("ERROR: Mismatch in #behaviour_sessions")
-            print(f"csv shows {num_sessions_csv} sessions")
-            print(f"path shows {num_sessions_path} sessions")
-
+        sessions_path = glob.glob(
+            behaviour_path + '/' + animal_name + '/*'
+        )
+        for index, session in csv_data.iterrows():
+            if session['date'] not in sessions_path:
+                print(f"ERROR: Behaviour session {session['date']} not found")
+        # num_sessions_path = len(glob.glob(behaviour_path + '/' + animal_name + '/*'))
+        # num_sessions_csv = len(csv_data[csv_data['num_behaviour_trials'] > 0])
+        # if num_sessions_path != num_sessions_csv:
+        #     print('ERROR: Mismatch in #behaviour_sessions')
+        #     print(f'csv shows {num_sessions_csv} sessions')
+        #     print(f'path shows {num_sessions_path} sessions')
+        #
         #     imaging_dir = (
         #         imaging_path
-        #         + "/"
+        #         + '/'
         #         + animal_name
-        #         + "/"
+        #         + '/'
         #         + date
-        #         + "/"
+        #         + '/'
         #         + experiment_number
         #     )
         #
-        #     print("**************************************************")
-        #     print(date + "/" + experiment_number)
-        #     print("**************************************************")
+        #     print('**************************************************')
+        #     print(date + '/' + experiment_number)
+        #     print('**************************************************')
         #
-        #     trial_files = sorted(glob.glob(imaging_dir + "/*.tif"))
+        #     trial_files = sorted(glob.glob(imaging_dir + '/*.tif'))
         #     if len(trial_files) != num_imaging_trials:
         #         print(len(trial_files), num_imaging_trials)
-        #         print("SESSION_ERROR: Mismatch in number of tiff files")
+        #         print('SESSION_ERROR: Mismatch in number of tiff files')
         #     file_sizes = []
         #     for t, trial_file in enumerate(trial_files):
         #         file_sizes.append(os.stat(trial_file).st_size)
@@ -154,13 +167,13 @@ def csv_with_behaviour(csv_path, behaviour_path, animals):
         #         )[0]
         #         for et in error_t:
         #             print(
-        #                 "TRIAL_ERROR: "
+        #                 'TRIAL_ERROR: '
         #                 + trial_files[et]
-        #                 + " file size ("
+        #                 + ' file size ('
         #                 + str(file_sizes[et])
-        #                 + " bytes) not close to mean ("
+        #                 + ' bytes) not close to mean ('
         #                 + str(mean_file_size)
-        #                 + " bytes)"
+        #                 + ' bytes)'
         #             )
         #
         #     print()
@@ -171,58 +184,58 @@ def csv_with_behaviour(csv_path, behaviour_path, animals):
 
 
 def main(**kwargs):
-    imaging_path = kwargs["imaging_path"]
-    behaviour_path = kwargs["behaviour_path"]
-    csv_path = kwargs["csv_path"]
-    output_path = kwargs["output_path"]
-    animals = kwargs["animals"].split(",")
-    if output_path != "":
+    imaging_path = kwargs['imaging_path']
+    behaviour_path = kwargs['behaviour_path']
+    csv_path = kwargs['csv_path']
+    output_path = kwargs['output_path']
+    animals = kwargs['animals'].split(',')
+    if output_path != '':
         if not (os.path.isdir(output_path)):
             os.mkdir(output_path)
     else:
-        output_path = "."
-    sys.stdout = open(output_path + "/file_check_output.txt", "w")
+        output_path = '.'
+    sys.stdout = open(output_path + '/file_check_output.txt', 'w')
 
     csv_with_imaging(csv_path, imaging_path, animals)
     csv_with_behaviour(csv_path, behaviour_path, animals)
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Cross check raw data files")
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Cross check raw data files')
     parser.add_argument(
-        "-i",
-        "--imaging_path",
+        '-i',
+        '--imaging_path',
         required=True,
-        help="Path to where the imaging data of all \
-            animals is stored",
+        help='Path to where the imaging data of all \
+            animals is stored',
     )
     parser.add_argument(
-        "-b",
-        "--behaviour_path",
+        '-b',
+        '--behaviour_path',
         required=True,
-        help="Path to where the behaviour data of all \
-            animals is stored",
+        help='Path to where the behaviour data of all \
+            animals is stored',
     )
     parser.add_argument(
-        "-c",
-        "--csv_path",
+        '-c',
+        '--csv_path',
         required=True,
-        help="Path to where the csv files of all \
-            animals are stored",
+        help='Path to where the csv files of all \
+            animals are stored',
     )
     parser.add_argument(
-        "-o",
-        "--output_path",
+        '-o',
+        '--output_path',
         required=False,
-        default=".",
-        help="Path to store results.",
+        default='.',
+        help='Path to store results.',
     )
     parser.add_argument(
-        "-a",
-        "--animals",
+        '-a',
+        '--animals',
         required=True,
-        default="",
-        help="Comma separated list of animals to analyze",
+        default='',
+        help='Comma separated list of animals to analyze',
     )
 
     args = parser.parse_args()
