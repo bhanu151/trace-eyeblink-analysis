@@ -106,10 +106,8 @@ def cross_check_with_csv(csv_path, imaging_path, behaviour_path, animals):
 
                     else:
                         print("ERROR: Imaging session not found")
-                        continue
                 else:
                     print("ERROR: Imaging session not found")
-                    continue
 
             bhvr_sess_name = f"{animal_name}_{session['behaviour_code']}_{session['behaviour_session_number']}"
 
@@ -163,7 +161,6 @@ def cross_check_with_csv(csv_path, imaging_path, behaviour_path, animals):
                     print(
                         f"ERROR: Behaviour session {bhvr_sess_name} not found"
                     )
-                    continue
             print()
         print()
         print()
