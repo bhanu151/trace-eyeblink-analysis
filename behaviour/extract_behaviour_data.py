@@ -5,6 +5,7 @@ import datetime
 import argparse
 import math
 import os
+import pandas as pd
 
 
 def extract_data_lines(frame_stack, fmt="%Y-%m-%dT%H:%M:%S.%f"):
@@ -109,46 +110,82 @@ def get_baseline(t_phase, eye_int):
     return baseline_mean, baseline_std
 
 
-def measure_eye_blink_response(t_phase, eye_int, IR_flag):
+def measure_eye_blink_response(t_phase, eye_int, ir_flag):
     """
     Returns the score of eye-blink response, where
     score = (intensity - mean(baseline_intensity)) / std(baseline_intensity)
     Note: If the ROI was imaged with an IR camera, -score is returned
     """
     baseline_mean, baseline_std = get_baseline(t_phase, eye_int)
-    if IR_flag:
+    if ir_flag:
         return -(eye_int - baseline_mean) / baseline_std
     else:
         return (eye_int - baseline_mean) / baseline_std
+
+
+def calc_frac_eye_closure(frame_stack, eye_coords, percentile, ir_flag):
+    """
+    Returns the fraction eye closure, i.e, fec
+    The ROI intensities are thresholded and binarized and fec is calculated as:
+    fec = #black pixels in ROI / total #pixels in ROI
+    """
+    x_min, y_min, x_max, y_max = eye_coords
+    threshold = np.percentile(frame_stack[0], percentile)
+    eye_openness = []
+
+    for frame in frame_stack:
+        eye_ROI = frame[x_min:x_max, y_min:y_max]
+        if ir_flag:
+            binarized_ROI = eye_ROI < threshold
+            eye_openness.append(np.sum(binarized_ROI) / len(binarized_ROI))
+        else:
+            binarized_ROI = eye_ROI > threshold
+            eye_openness.append(np.sum(np.logical_not(binarized_ROI)) / len(binarized_ROI))
+    # TODO take max only in pre stim period
+    # print(type(eye_openness))
+    fec = [1 - (eye_openness[i] / np.max(eye_openness)) for i in range(len(eye_openness))]
+    return fec
 
 
 def main(**kwargs):
     data_path = kwargs["data_path"]
     csv_path = kwargs["csv_path"]
     output_path = kwargs["output_path"]
-    IR_animals = kwargs["IR_animals"]
+    ir_animals = kwargs["ir_animals"]
     animals = kwargs["animals"].split(",")
-    if animals == "":
-        animal_paths = glob.glob(datadir + "/G*")
-    else:
-        animal_paths = [datadir + "/" + anim for anim in animals]
+    animal_paths = [data_path + "/" + anim for anim in animals]
     for animal_path in animal_paths:
         animal_name = animal_path.split("/")[-1]
         print(animal_name)
-        if animal_name in IR_animals:
-            IR_flag = True
+        if animal_name in ir_animals:
+            ir_flag = True
         else:
-            IR_flag = False
+            ir_flag = False
         if not (os.path.isdir(animal_path)):
             print(f"{animal_name}'s data not found")
             continue
-        for session_path in glob.glob(
-            animal_path + "/" + animal_name + "*[All|An|So|Hr]*"
-        ):
-            session_name = session_path.split("/")[-1]
-            print(session_name)
+
+        csv_data = pd.read_csv(
+            csv_path + "/" + animal_name + ".csv",
+            dtype={
+                'behaviour_code': str,
+                'behaviour_session_number': str,
+                'xmin:ymin': str,
+                'xmax:ymax': str,
+            },
+        )
+
+        for _, session in csv_data.iterrows():
+            session_name = animal_name + "_" + session["behaviour_code"] + "_" + session["behaviour_session_number"]
+            session_path = animal_path + "/" + session_name
             if not (os.path.isdir(session_path)):
                 continue
+            print(session_name)
+
+            x_min, y_min = [int(i) for i in session["xmin:ymin"].split(":")]
+            x_max, y_max = [int(i) for i in session["xmax:ymax"].split(":")]
+            eye_coords = (x_min, y_min, x_max, y_max)
+
             data_dict = {
                 "camera_timestamp": [],
                 "arduino_timestamp": [],
@@ -163,28 +200,14 @@ def main(**kwargs):
                 "probe_flag": [],
                 "eye_intensity": [],
                 "blink_response": [],
+                "frac_eye_closure": [],
             }
+
             for t, trial_video in enumerate(
                 sorted(glob.glob(session_path + "/*.tif*"))
             ):
                 try:
-                    # print(t, trial_video)
                     frame_stack = io.imread(trial_video)
-                    # fec.append([])
-                    # camera_timestamp.append([])
-                    # arduino_timestamp.append([])
-                    # protocol.append([])
-                    # trial_num.append([])
-                    # puff_US.append([])
-                    # tone_CS.append([])
-                    # light_CS.append([])
-                    # microscope.append([])
-                    # camera.append([])
-                    # eye_intensity.append([])
-                    # camera_timestamp[t], arduino_timestamp[t], protocol[t],\
-                    # trial_num[t], puff_US[t], tone_CS[t], light_CS[t],\
-                    # microscope[t], camera[t], eye_intensity[t] = \
-                    # extract_data_lines(frame_stack)
                     (
                         camera_ts,
                         arduino_ts,
@@ -199,28 +222,32 @@ def main(**kwargs):
                         prob,
                         eye_int,
                     ) = extract_data_lines(frame_stack)
-                    data_dict["camera_timestamp"].append(camera_ts)
-                    data_dict["arduino_timestamp"].append(arduino_ts)
-                    data_dict["protocol"].append(proto)
-                    data_dict["trial_num"].append(t_num)
-                    data_dict["puff_US"].append(puff)
-                    data_dict["tone_CS"].append(tone)
-                    data_dict["light_CS"].append(light)
-                    data_dict["microscope"].append(scope)
-                    data_dict["camera"].append(cam)
-                    data_dict["trial_phase"].append(t_phase)
-                    data_dict["probe_flag"].append(prob)
-                    data_dict["eye_intensity"].append(eye_int)
-                    data_dict["blink_response"].append(
-                        measure_eye_blink_response(t_phase, eye_int, IR_flag)
-                    )
                 except Exception:
                     print(
                         f"Issue with TIFF File {trial_video}.\nSkipping session {session_name}"
                     )
                     break
+                data_dict["camera_timestamp"].append(camera_ts)
+                data_dict["arduino_timestamp"].append(arduino_ts)
+                data_dict["protocol"].append(proto)
+                data_dict["trial_num"].append(t_num)
+                data_dict["puff_US"].append(puff)
+                data_dict["tone_CS"].append(tone)
+                data_dict["light_CS"].append(light)
+                data_dict["microscope"].append(scope)
+                data_dict["camera"].append(cam)
+                data_dict["trial_phase"].append(t_phase)
+                data_dict["probe_flag"].append(prob)
+                data_dict["eye_intensity"].append(eye_int)
+                data_dict["blink_response"].append(
+                    measure_eye_blink_response(t_phase, eye_int, ir_flag)
+                )
+
+                fec = calc_frac_eye_closure(frame_stack, eye_coords, percentile=45, ir_flag=ir_flag)
+                data_dict["frac_eye_closure"].append(fec)
+
             if output_path == "":
-                output_path = datadir
+                output_path = data_path
             outpath = output_path + "/" + animal_name
             if not (os.path.isdir(outpath)):
                 os.mkdir(outpath)
@@ -263,7 +290,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-i",
-        "--IR_animals",
+        "--ir_animals",
         required=False,
         default="",
         help="Comma separated list of animals imaged using IR camera",
