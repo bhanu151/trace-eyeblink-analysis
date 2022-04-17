@@ -1,14 +1,13 @@
 import numpy as np
 import glob
-import datetime
 import argparse
-import math
 import sys
 import os
 import pandas as pd
 
 
-def cross_check_with_csv(csv_path, imaging_path, behaviour_path, animals):
+def cross_check_with_csv(csv_path, imaging_path, behaviour_path, animals,
+                         imaging_file_size_thresh=0.01, behaviour_file_size_thresh=0.01):
 
     for animal_name in animals:
         csv_data = pd.read_csv(
@@ -35,7 +34,7 @@ def cross_check_with_csv(csv_path, imaging_path, behaviour_path, animals):
         )
         bhvr_sess_names = [x.split("/")[-1] for x in bhvr_sess_paths]
 
-        for index, session in csv_data.iterrows():
+        for session in csv_data.iterrows():
 
             print("**************************************************")
             print(
@@ -88,12 +87,12 @@ def cross_check_with_csv(csv_path, imaging_path, behaviour_path, animals):
                             if session['behaviour_code'] == 'Hr7':
                                 small_file_size = np.percentile(file_sizes, 40)
                                 error_t = np.where(np.logical_and(
-                                    ((max_file_size - file_sizes) / max_file_size) > 0.01,
-                                    np.abs((small_file_size - file_sizes) / small_file_size) > 0.01
+                                    ((max_file_size - file_sizes) / max_file_size) > imaging_file_size_thresh,
+                                    np.abs((small_file_size - file_sizes) / small_file_size) > imaging_file_size_thresh
                                 ))[0]
                             else:
                                 error_t = np.where(
-                                    ((max_file_size - file_sizes) / max_file_size) > 0.01
+                                    ((max_file_size - file_sizes) / max_file_size) > imaging_file_size_thresh
                                 )[0]
                             for et in error_t:
                                 et_t_num = int(trial_files[et].split('-')[-3])
@@ -142,12 +141,12 @@ def cross_check_with_csv(csv_path, imaging_path, behaviour_path, animals):
                         if session['behaviour_code'] == 'Hr7':
                             small_file_size = np.percentile(file_sizes, 40)
                             error_t = np.where(np.logical_and(
-                                ((max_file_size - file_sizes) / max_file_size) > 0.01,
-                                np.abs((small_file_size - file_sizes) / small_file_size) > 0.01
+                                ((max_file_size - file_sizes) / max_file_size) > behaviour_file_size_thresh,
+                                np.abs((small_file_size - file_sizes) / small_file_size) > behaviour_file_size_thresh
                             ))[0]
                         else:
                             error_t = np.where(
-                                ((max_file_size - file_sizes) / max_file_size) > 0.01
+                                ((max_file_size - file_sizes) / max_file_size) > behaviour_file_size_thresh
                             )[0]
                         for et in error_t:
                             et_t_num = int(trial_files[et].split('/')[-1].split('.')[-2])
@@ -179,9 +178,11 @@ def main(**kwargs):
         output_path = "."
     sys.stdout = open(output_path + "/file_check_output.txt", "w")
 
-    # csv_with_imaging(csv_path, imaging_path, animals)
-    # csv_with_behaviour(csv_path, behaviour_path, animals)
-    cross_check_with_csv(csv_path, imaging_path, behaviour_path, animals)
+    imaging_file_size_thresh = 0.01
+    behaviour_file_size_thresh = 0.10
+
+    cross_check_with_csv(csv_path, imaging_path, behaviour_path, animals,
+                         imaging_file_size_thresh, behaviour_file_size_thresh)
 
 
 if __name__ == "__main__":
