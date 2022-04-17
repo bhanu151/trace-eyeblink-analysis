@@ -34,7 +34,7 @@ def cross_check_with_csv(csv_path, imaging_path, behaviour_path, animals,
         )
         bhvr_sess_names = [x.split("/")[-1] for x in bhvr_sess_paths]
 
-        for session in csv_data.iterrows():
+        for _, session in csv_data.iterrows():
 
             print("**************************************************")
             print(
