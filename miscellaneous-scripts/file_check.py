@@ -39,7 +39,7 @@ def cross_check_with_csv(csv_path, imaging_path, behaviour_path, animals,
             print("**************************************************")
             print(
                 f"{session['date']}/{session['experiment_number']}\t\
-                {session['behaviour_code']}_{session['behaviour_session_number']}"
+                {session['behaviour_code']}_{session['upi']}"
             )
             print("**************************************************")
 
@@ -108,7 +108,7 @@ def cross_check_with_csv(csv_path, imaging_path, behaviour_path, animals,
                 else:
                     print("ERROR: Imaging session not found")
 
-            bhvr_sess_name = f"{animal_name}_{session['behaviour_code']}_{session['behaviour_session_number']}"
+            bhvr_sess_name = f"{animal_name}_{session['behaviour_code']}_{session['upi']}"
 
             if session["num_behaviour_trials"] > 0:
                 if bhvr_sess_name in bhvr_sess_names:
