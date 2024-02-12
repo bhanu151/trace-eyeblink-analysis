@@ -140,10 +140,14 @@ def calc_frac_eye_closure(frame_stack, eye_coords, percentile, ir_flag):
             eye_openness.append(np.sum(binarized_ROI) / len(binarized_ROI))
         else:
             binarized_ROI = eye_ROI > threshold
-            eye_openness.append(np.sum(np.logical_not(binarized_ROI)) / len(binarized_ROI))
+            eye_openness.append(
+                np.sum(np.logical_not(binarized_ROI)) / len(binarized_ROI)
+            )
     # TODO take max only in pre stim period
     # print(type(eye_openness))
-    fec = [1 - (eye_openness[i] / np.max(eye_openness)) for i in range(len(eye_openness))]
+    fec = [
+        1 - (eye_openness[i] / np.max(eye_openness)) for i in range(len(eye_openness))
+    ]
     return fec
 
 
@@ -168,15 +172,21 @@ def main(**kwargs):
         csv_data = pd.read_csv(
             csv_path + "/" + animal_name + ".csv",
             dtype={
-                'behaviour_code': str,
-                'behaviour_session_number': str,
-                'xmin:ymin': str,
-                'xmax:ymax': str,
+                "behaviour_code": str,
+                "behaviour_session_number": str,
+                "xmin:ymin": str,
+                "xmax:ymax": str,
             },
         )
 
         for _, session in csv_data.iterrows():
-            session_name = animal_name + "_" + session["behaviour_code"] + "_" + session["behaviour_session_number"]
+            session_name = (
+                animal_name
+                + "_"
+                + session["behaviour_code"]
+                + "_"
+                + session["behaviour_session_number"]
+            )
             session_path = animal_path + "/" + session_name
             if not (os.path.isdir(session_path)):
                 continue
@@ -243,7 +253,9 @@ def main(**kwargs):
                     measure_eye_blink_response(t_phase, eye_int, ir_flag)
                 )
 
-                fec = calc_frac_eye_closure(frame_stack, eye_coords, percentile=45, ir_flag=ir_flag)
+                fec = calc_frac_eye_closure(
+                    frame_stack, eye_coords, percentile=45, ir_flag=ir_flag
+                )
                 data_dict["frac_eye_closure"].append(fec)
 
             if output_path == "":
