@@ -1,6 +1,5 @@
 import numpy as np
 from skimage import io
-import glob
 import datetime
 import argparse
 import math
@@ -162,20 +161,23 @@ def main(**kwargs):
                 eye_coords = (x_min, y_min, x_max, y_max)
 
             data_dict = {
-                "skip_trial": [],
-                "arduino_timestamp": [],
+                "upi": [],
                 "protocol": [],
                 "trial_num": [],
-                "trial_phase": [],
+                "skip_trial": [],
                 "probe_trial": [],
                 "cs_start_frame": [],
                 "trace_start_frame": [],
                 "us_start_frame": [],
                 "post_start_frame": [],
                 "eye_pixels": [],
+                "arduino_timestamp": [],
                 "fec": [],
-                "blink_response": [],
             }
+            data_dict["upi"] = [session["upi"]] * session["num_behaviour_trials"]
+            data_dict["protocol"] = [session["behaviour_code"]] * session[
+                "num_behaviour_trials"
+            ]
 
             for t in range(session["num_behaviour_trials"]):
                 trial_video = session_path + f"/{(t+1):03}.tiff"
@@ -255,40 +257,31 @@ def main(**kwargs):
                             )
                         )
 
+                del data_dict["eye_pixels"]
+
                 if output_path == "":
                     output_path = data_path
                 outpath = output_path + "/" + animal_name
                 if not (os.path.isdir(outpath)):
                     os.mkdir(outpath)
-                outfile = outpath + "/" + session_name + "_behaviour_data.npy"
-                # print(outfile)
-                np.save(outfile, data_dict)
+                outfile = (
+                    outpath
+                    + "/"
+                    + f"{animal_name}_{session['upi']}"
+                    + "_behaviour_data.csv"
+                )
 
-                data_df = pd.DataFrame()
-                data_df["trial_num"] = data_dict["trial_num"]
-                data_df["skip_trial"] = data_dict["skip_trial"]
-                data_df["probe_trial"] = data_dict["probe_trial"]
-                data_df["cs_start_frame"] = data_dict["cs_start_frame"]
-                data_df["trace_start_frame"] = data_dict["trace_start_frame"]
-                data_df["us_start_frame"] = data_dict["us_start_frame"]
-                data_df["post_start_frame"] = data_dict["post_start_frame"]
-                data_df["behaviour_code"] = [session["behaviour_code"]] * session[
-                    "num_behaviour_trials"
-                ]
-                data_df["upi"] = [session["upi"]] * session["num_behaviour_trials"]
-                for f in range(NUM_MAX_FRAMES):
-                    data_df[f"timestamp_{f:03}"] = [
-                        data_dict["arduino_timestamp"][t][f]
-                        for t in range(session["num_behaviour_trials"])
-                    ]
-                for f in range(NUM_MAX_FRAMES):
-                    data_df[f"fec_{f:03}"] = [
-                        data_dict["fec"][t][f]
-                        for t in range(session["num_behaviour_trials"])
-                    ]
-
-                data_df.to_csv(f"{session_name}_behaviour_data.csv", index=False)
-        break
+                data_df = pd.DataFrame(data_dict)
+                data_df[
+                    [f"timestamp_{f:03}" for f in range(NUM_MAX_FRAMES)]
+                ] = pd.DataFrame(
+                    data_df.arduino_timestamp.tolist(), index=data_df.index
+                )
+                data_df[[f"fec_{f:03}" for f in range(NUM_MAX_FRAMES)]] = pd.DataFrame(
+                    data_df.fec.tolist(), index=data_df.index
+                )
+                data_df.drop(columns=["arduino_timestamp", "fec"], inplace=True)
+                data_df.to_csv(outfile, index=False)
 
 
 if __name__ == "__main__":
