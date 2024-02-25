@@ -6,42 +6,41 @@ import argparse
 import math
 import os
 import pandas as pd
+from scipy import signal
+from cv2 import medianBlur
 
 
-def extract_data_lines(frame_stack, fmt="%Y-%m-%dT%H:%M:%S.%f"):
-    camera_ts = []
+NUM_MAX_FRAMES = 750
+MEDIAN_FILTER_SIZE = 5
+SAVGOL_WINDOW_SIZE = 10
+SAVGOL_POLYNOMIAL_ORDER = 2
+
+
+def extract_data_lines_and_eye_pixels(
+    frame_stack,
+    eye_coords,
+    threshold,
+    filter_size,
+    savgol_window_size,
+    savgol_polynomial_order,
+    is_white_eye=False,
+    fmt="%Y-%m-%dT%H:%M:%S.%f",
+):
     arduino_ts = []
-    proto = []
-    trial_num = []
-    puff = []
-    tone = []
-    light = []
-    scope = []
-    cam = []
     t_phase = []
-    prob = 0
-    eye_int = []
+    prob = False
+    eye_openness = []
+    x_min, y_min, x_max, y_max = eye_coords
+
     for frame in frame_stack:
         bin_line = frame[0, :]
         data_line = ("".join(([chr(x) for x in bin_line]))).rstrip()
         tokens = data_line.split(",")
         try:
-            camera_ts.append(datetime.datetime.strptime(tokens[0], fmt))
-        except ValueError:
-            fmt1 = "%Y-%m-%dT%H:%M:%S"
-            camera_ts.append(datetime.datetime.strptime(tokens[0], fmt1))
-        try:
             arduino_ts.append(datetime.datetime.strptime(tokens[1], fmt))
         except ValueError:
             fmt1 = "%Y-%m-%dT%H:%M:%S"
             arduino_ts.append(datetime.datetime.strptime(tokens[1], fmt1))
-        proto.append(tokens[3])
-        trial_num.append(np.uint16(tokens[4]))
-        puff.append(np.uint8(tokens[5]))
-        tone.append(np.uint8(tokens[6]))
-        light.append(np.uint8(tokens[7]))
-        scope.append(np.uint8(tokens[8]))
-        cam.append(np.uint8(tokens[9]))
         if tokens[10] == "PRE_":
             t_phase.append(1)
         elif tokens[10] == "CS+":
@@ -54,99 +53,50 @@ def extract_data_lines(frame_stack, fmt="%Y-%m-%dT%H:%M:%S.%f"):
             t_phase.append(4)
         elif tokens[10] == "PROB":
             t_phase.append(4)
-            prob = 1
+            prob = True
         elif tokens[10] == "NONE":
             t_phase.append(4)
         elif tokens[10] == "POST":
             t_phase.append(5)
         else:
-            print(f"ERROR: Can't interpret {tokens[10]} in trial {trial_num}")
+            print(f"ERROR: Can't interpret {tokens[10]} in trial {tokens[4]}")
             t_phase.append(math.nan)
-        eye_int.append(np.double(tokens[-1]))
+
+        eye_roi = frame[y_min:y_max, x_min:x_max]
+        blurred_roi = medianBlur(eye_roi, filter_size)
+        binarized_roi = blurred_roi > threshold
+
+        if is_white_eye:
+            eye_openness.append(np.sum(binarized_roi))
+        else:
+            eye_openness.append(np.sum(~binarized_roi))
+
+    smoothened_eye_pixels = list(
+        signal.savgol_filter(eye_openness, savgol_window_size, savgol_polynomial_order)
+    )
+
     return (
-        camera_ts,
         arduino_ts,
-        proto,
-        trial_num,
-        puff,
-        tone,
-        light,
-        scope,
-        cam,
         t_phase,
         prob,
-        eye_int,
+        smoothened_eye_pixels,
     )
 
 
-def get_baseline(t_phase, eye_int):
-    # print(t_phase)
-    try:
-        cs_start_frame = t_phase.index(2)
-    except ValueError:
-        cs_start_frame = len(t_phase)
-
-    baseline_start_frame = int(0.1 * cs_start_frame)
-    baseline_end_frame = baseline_start_frame + int(0.2 * cs_start_frame)
-    while baseline_end_frame <= cs_start_frame:
-        baseline_window = np.array(eye_int[baseline_start_frame:baseline_end_frame])
-        baseline_mean = np.mean(baseline_window)
-        baseline_std = np.std(baseline_window)
-        overshoot_index = np.where(baseline_window > baseline_mean + 2 * baseline_std)[
-            0
-        ]
-        if len(overshoot_index) > 0:
-            # print(f"overshoot_index = {overshoot_index}")
-            # print(f"blink in baseline")
-            # print(baseline_start_frame, baseline_end_frame)
-            # print(baseline_window)
-            # print(baseline_mean, baseline_std)
-            baseline_start_frame = baseline_start_frame + overshoot_index[0] + 1
-            baseline_end_frame = baseline_start_frame + int(0.2 * cs_start_frame)
-        else:
-            # print(baseline_window)
-            # print(f"no eyelid flicker")
-            break
-    return baseline_mean, baseline_std
-
-
-def measure_eye_blink_response(t_phase, eye_int, ir_flag):
-    """
-    Returns the score of eye-blink response, where
-    score = (intensity - mean(baseline_intensity)) / std(baseline_intensity)
-    Note: If the ROI was imaged with an IR camera, -score is returned
-    """
-    baseline_mean, baseline_std = get_baseline(t_phase, eye_int)
-    if ir_flag:
-        return -(eye_int - baseline_mean) / baseline_std
-    else:
-        return (eye_int - baseline_mean) / baseline_std
-
-
-def calc_frac_eye_closure(frame_stack, eye_coords, percentile, ir_flag):
+def calc_frac_eye_closure(trial_eye_pixels, cs_start_frame, min_eye_pixels):
     """
     Returns the fraction eye closure, i.e, fec
     The ROI intensities are thresholded and binarized and fec is calculated as:
     fec = #black pixels in ROI / total #pixels in ROI
     """
-    x_min, y_min, x_max, y_max = eye_coords
-    threshold = np.percentile(frame_stack[0], percentile)
-    eye_openness = []
-
-    for frame in frame_stack:
-        eye_ROI = frame[x_min:x_max, y_min:y_max]
-        if ir_flag:
-            binarized_ROI = eye_ROI < threshold
-            eye_openness.append(np.sum(binarized_ROI) / len(binarized_ROI))
-        else:
-            binarized_ROI = eye_ROI > threshold
-            eye_openness.append(
-                np.sum(np.logical_not(binarized_ROI)) / len(binarized_ROI)
-            )
-    # TODO take max only in pre stim period
-    # print(type(eye_openness))
+    baseline_eye_pixels = np.nanmean(trial_eye_pixels[:cs_start_frame])
     fec = [
-        1 - (eye_openness[i] / np.max(eye_openness)) for i in range(len(eye_openness))
+        1
+        - (
+            (trial_eye_pixels[i] - min_eye_pixels)
+            / (baseline_eye_pixels - min_eye_pixels)
+        )
+        for i in range(len(trial_eye_pixels))
     ]
     return fec
 
@@ -172,10 +122,13 @@ def main(**kwargs):
         csv_data = pd.read_csv(
             csv_path + "/" + animal_name + ".csv",
             dtype={
+                "upi": int,
                 "behaviour_code": str,
                 "behaviour_session_number": str,
                 "xmin:ymin": str,
                 "xmax:ymax": str,
+                "eye_threshold": int,
+                "num_behaviour_trials": int,
             },
         )
 
@@ -185,89 +138,157 @@ def main(**kwargs):
                 + "_"
                 + session["behaviour_code"]
                 + "_"
-                + session["behaviour_session_number"]
+                + str(session["upi"])
             )
             session_path = animal_path + "/" + session_name
+            print(session_path)
             if not (os.path.isdir(session_path)):
                 continue
-            print(session_name)
+            tiff_file_error = False
 
-            x_min, y_min = [int(i) for i in session["xmin:ymin"].split(":")]
-            x_max, y_max = [int(i) for i in session["xmax:ymax"].split(":")]
-            eye_coords = (x_min, y_min, x_max, y_max)
+            csv_error_trials = set()
+            if pd.notna(session["skip_behaviour_trials"]):
+                csv_error_trials.update(
+                    [int(x) for x in session["skip_behaviour_trials"].split(";")]
+                )
+            if pd.notna(session["missing_behaviour_trials"]):
+                csv_error_trials.update(
+                    int(x) for x in session["missing_behaviour_trials"].split(";")
+                )
+
+            if session["num_behaviour_trials"] - len(csv_error_trials) > 0:
+                x_min, y_min = [int(i) for i in session["xmin:ymin"].split(":")]
+                x_max, y_max = [int(i) for i in session["xmax:ymax"].split(":")]
+                eye_coords = (x_min, y_min, x_max, y_max)
 
             data_dict = {
-                "camera_timestamp": [],
+                "skip_trial": [],
                 "arduino_timestamp": [],
                 "protocol": [],
                 "trial_num": [],
-                "puff_US": [],
-                "tone_CS": [],
-                "light_CS": [],
-                "microscope": [],
-                "camera": [],
                 "trial_phase": [],
-                "probe_flag": [],
-                "eye_intensity": [],
+                "probe_trial": [],
+                "cs_start_frame": [],
+                "trace_start_frame": [],
+                "us_start_frame": [],
+                "post_start_frame": [],
+                "eye_pixels": [],
+                "fec": [],
                 "blink_response": [],
-                "frac_eye_closure": [],
             }
 
-            for t, trial_video in enumerate(
-                sorted(glob.glob(session_path + "/*.tif*"))
-            ):
-                try:
-                    frame_stack = io.imread(trial_video)
-                    (
-                        camera_ts,
-                        arduino_ts,
-                        proto,
-                        t_num,
-                        puff,
-                        tone,
-                        light,
-                        scope,
-                        cam,
-                        t_phase,
-                        prob,
-                        eye_int,
-                    ) = extract_data_lines(frame_stack)
-                except Exception:
-                    print(
-                        f"Issue with TIFF File {trial_video}.\nSkipping session {session_name}"
-                    )
-                    break
-                data_dict["camera_timestamp"].append(camera_ts)
-                data_dict["arduino_timestamp"].append(arduino_ts)
-                data_dict["protocol"].append(proto)
-                data_dict["trial_num"].append(t_num)
-                data_dict["puff_US"].append(puff)
-                data_dict["tone_CS"].append(tone)
-                data_dict["light_CS"].append(light)
-                data_dict["microscope"].append(scope)
-                data_dict["camera"].append(cam)
-                data_dict["trial_phase"].append(t_phase)
-                data_dict["probe_flag"].append(prob)
-                data_dict["eye_intensity"].append(eye_int)
-                data_dict["blink_response"].append(
-                    measure_eye_blink_response(t_phase, eye_int, ir_flag)
+            for t in range(session["num_behaviour_trials"]):
+                trial_video = session_path + f"/{(t+1):03}.tiff"
+                if t + 1 in csv_error_trials:
+                    data_dict["skip_trial"].append(True)
+                    data_dict["arduino_timestamp"].append([np.nan] * NUM_MAX_FRAMES)
+                    data_dict["trial_num"].append(t + 1)
+                    data_dict["probe_trial"].append(np.nan)
+                    data_dict["eye_pixels"].append(np.array([np.nan] * NUM_MAX_FRAMES))
+                    data_dict["cs_start_frame"].append(np.nan)
+                    data_dict["trace_start_frame"].append(np.nan)
+                    data_dict["us_start_frame"].append(np.nan)
+                    data_dict["post_start_frame"].append(np.nan)
+                else:
+                    try:
+                        frame_stack = io.imread(trial_video)
+                        (
+                            arduino_ts,
+                            t_phase,
+                            prob,
+                            eye_pix,
+                        ) = extract_data_lines_and_eye_pixels(
+                            frame_stack,
+                            eye_coords=eye_coords,
+                            threshold=session["eye_threshold"],
+                            filter_size=MEDIAN_FILTER_SIZE,
+                            savgol_window_size=SAVGOL_WINDOW_SIZE,
+                            savgol_polynomial_order=SAVGOL_POLYNOMIAL_ORDER,
+                            is_white_eye=ir_flag,
+                        )
+                        t_phase = np.array(t_phase)
+                        cs_start_frame = np.where(t_phase == 2)[0][0]
+                        trace_start_frame = np.where(t_phase == 3)[0][0]
+                        us_start_frame = np.where(t_phase == 4)[0][0]
+                        post_start_frame = np.where(t_phase == 5)[0][0]
+
+                        data_dict["skip_trial"].append(False)
+                        data_dict["arduino_timestamp"].append(
+                            arduino_ts + [np.nan] * (NUM_MAX_FRAMES - len(eye_pix))
+                        )
+                        data_dict["trial_num"].append(t + 1)
+                        data_dict["probe_trial"].append(prob)
+                        data_dict["eye_pixels"].append(
+                            np.array(
+                                eye_pix + [np.nan] * (NUM_MAX_FRAMES - len(eye_pix))
+                            )
+                        )
+                        data_dict["cs_start_frame"].append(cs_start_frame)
+                        data_dict["trace_start_frame"].append(trace_start_frame)
+                        data_dict["us_start_frame"].append(us_start_frame)
+                        data_dict["post_start_frame"].append(post_start_frame)
+
+                    except Exception:
+                        print(
+                            f"Issue with TIFF File {trial_video}.\nSkipping session {session_name}"
+                        )
+                        tiff_file_error = True
+                        break
+
+            if not tiff_file_error:
+                min_eye_pixels = np.nanmin(
+                    [
+                        np.nanmin(data_dict["eye_pixels"][t])
+                        for t in np.arange(session["num_behaviour_trials"])
+                    ]
                 )
 
-                fec = calc_frac_eye_closure(
-                    frame_stack, eye_coords, percentile=45, ir_flag=ir_flag
-                )
-                data_dict["frac_eye_closure"].append(fec)
+                for t in range(session["num_behaviour_trials"]):
+                    if t + 1 in csv_error_trials:
+                        data_dict["fec"].append([np.nan] * NUM_MAX_FRAMES)
+                    else:
+                        data_dict["fec"].append(
+                            calc_frac_eye_closure(
+                                data_dict["eye_pixels"][t],
+                                data_dict["cs_start_frame"][t],
+                                min_eye_pixels,
+                            )
+                        )
 
-            if output_path == "":
-                output_path = data_path
-            outpath = output_path + "/" + animal_name
-            if not (os.path.isdir(outpath)):
-                os.mkdir(outpath)
-            outfile = outpath + "/" + session_name + "_behaviour_data.npy"
-            # print(outfile)
-            np.save(outfile, data_dict)
-            # break
-        # break
+                if output_path == "":
+                    output_path = data_path
+                outpath = output_path + "/" + animal_name
+                if not (os.path.isdir(outpath)):
+                    os.mkdir(outpath)
+                outfile = outpath + "/" + session_name + "_behaviour_data.npy"
+                # print(outfile)
+                np.save(outfile, data_dict)
+
+                data_df = pd.DataFrame()
+                data_df["trial_num"] = data_dict["trial_num"]
+                data_df["skip_trial"] = data_dict["skip_trial"]
+                data_df["probe_trial"] = data_dict["probe_trial"]
+                data_df["cs_start_frame"] = data_dict["cs_start_frame"]
+                data_df["trace_start_frame"] = data_dict["trace_start_frame"]
+                data_df["us_start_frame"] = data_dict["us_start_frame"]
+                data_df["post_start_frame"] = data_dict["post_start_frame"]
+                data_df["behaviour_code"] = [session["behaviour_code"]] * session[
+                    "num_behaviour_trials"
+                ]
+                data_df["upi"] = [session["upi"]] * session["num_behaviour_trials"]
+                for f in range(NUM_MAX_FRAMES):
+                    data_df[f"timestamp_{f:03}"] = [
+                        data_dict["arduino_timestamp"][t][f]
+                        for t in range(session["num_behaviour_trials"])
+                    ]
+                for f in range(NUM_MAX_FRAMES):
+                    data_df[f"fec_{f:03}"] = [
+                        data_dict["fec"][t][f]
+                        for t in range(session["num_behaviour_trials"])
+                    ]
+
+                data_df.to_csv(f"{session_name}_behaviour_data.csv", index=False)
+        break
 
 
 if __name__ == "__main__":
