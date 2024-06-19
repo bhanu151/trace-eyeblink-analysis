@@ -1,5 +1,6 @@
 import numpy as np
 from skimage import io
+import glob
 import datetime
 import argparse
 import math
@@ -130,6 +131,11 @@ def main(**kwargs):
                 "num_behaviour_trials": int,
             },
         )
+        if output_path == "":
+            output_path = data_path
+        outpath = output_path + "/" + animal_name
+        if not (os.path.isdir(outpath)):
+            os.mkdir(outpath)
 
         for _, session in csv_data.iterrows():
             session_name = (
@@ -259,11 +265,6 @@ def main(**kwargs):
 
                 del data_dict["eye_pixels"]
 
-                if output_path == "":
-                    output_path = data_path
-                outpath = output_path + "/" + animal_name
-                if not (os.path.isdir(outpath)):
-                    os.mkdir(outpath)
                 outfile = (
                     outpath
                     + "/"
@@ -282,6 +283,21 @@ def main(**kwargs):
                 )
                 data_df.drop(columns=["arduino_timestamp", "fec"], inplace=True)
                 data_df.to_csv(outfile, index=False)
+
+        cumulative_df = pd.concat(
+            [
+                pd.read_csv(
+                    output_path
+                    + f"/{animal_name}/{animal_name}_{session['upi']}_behaviour_data.csv",
+                    header=0,
+                )
+                for _, session in csv_data.iterrows()
+                if session["num_behaviour_trials"] > 0
+            ]
+        )
+        cumulative_df.to_csv(
+            f"{output_path}/{animal_name}/{animal_name}_behaviour_data.csv", index=False
+        )
 
 
 if __name__ == "__main__":
