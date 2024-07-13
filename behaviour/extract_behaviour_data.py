@@ -10,7 +10,8 @@ from scipy import signal
 from cv2 import medianBlur
 
 
-NUM_MAX_FRAMES = 750
+NUM_PRE_CS_FRAMES = 60
+NUM_POST_CS_FRAMES = 540
 MEDIAN_FILTER_SIZE = 5
 SAVGOL_WINDOW_SIZE = 10
 SAVGOL_POLYNOMIAL_ORDER = 2
@@ -187,12 +188,16 @@ def main(**kwargs):
 
             for t in range(session["num_behaviour_trials"]):
                 trial_video = session_path + f"/{(t+1):03}.tiff"
+                data_dict["trial_num"].append(t + 1)
                 if t + 1 in csv_error_trials:
                     data_dict["skip_trial"].append(True)
-                    data_dict["arduino_timestamp"].append([np.nan] * NUM_MAX_FRAMES)
-                    data_dict["trial_num"].append(t + 1)
+                    data_dict["arduino_timestamp"].append(
+                        [np.nan] * (NUM_PRE_CS_FRAMES + NUM_POST_CS_FRAMES)
+                    )
                     data_dict["probe_trial"].append(np.nan)
-                    data_dict["eye_pixels"].append(np.array([np.nan] * NUM_MAX_FRAMES))
+                    data_dict["eye_pixels"].append(
+                        np.array([np.nan] * (NUM_PRE_CS_FRAMES + NUM_POST_CS_FRAMES))
+                    )
                     data_dict["cs_start_frame"].append(np.nan)
                     data_dict["trace_start_frame"].append(np.nan)
                     data_dict["us_start_frame"].append(np.nan)
@@ -220,21 +225,52 @@ def main(**kwargs):
                         us_start_frame = np.where(t_phase == 4)[0][0]
                         post_start_frame = np.where(t_phase == 5)[0][0]
 
-                        data_dict["skip_trial"].append(False)
-                        data_dict["arduino_timestamp"].append(
-                            arduino_ts + [np.nan] * (NUM_MAX_FRAMES - len(eye_pix))
-                        )
-                        data_dict["trial_num"].append(t + 1)
-                        data_dict["probe_trial"].append(prob)
-                        data_dict["eye_pixels"].append(
-                            np.array(
-                                eye_pix + [np.nan] * (NUM_MAX_FRAMES - len(eye_pix))
+                        if cs_start_frame < NUM_PRE_CS_FRAMES:
+                            data_dict["skip_trial"].append(True)
+                            data_dict["arduino_timestamp"].append(
+                                [np.nan] * (NUM_PRE_CS_FRAMES + NUM_POST_CS_FRAMES)
                             )
-                        )
-                        data_dict["cs_start_frame"].append(cs_start_frame)
-                        data_dict["trace_start_frame"].append(trace_start_frame)
-                        data_dict["us_start_frame"].append(us_start_frame)
-                        data_dict["post_start_frame"].append(post_start_frame)
+                            data_dict["probe_trial"].append(np.nan)
+                            data_dict["eye_pixels"].append(
+                                np.array(
+                                    [np.nan] * (NUM_PRE_CS_FRAMES + NUM_POST_CS_FRAMES)
+                                )
+                            )
+                            data_dict["cs_start_frame"].append(np.nan)
+                            data_dict["trace_start_frame"].append(np.nan)
+                            data_dict["us_start_frame"].append(np.nan)
+                            data_dict["post_start_frame"].append(np.nan)
+                            csv_error_trials.add(t + 1)
+
+                        else:
+                            data_dict["skip_trial"].append(False)
+                            data_dict["arduino_timestamp"].append(
+                                arduino_ts[
+                                    cs_start_frame
+                                    - NUM_PRE_CS_FRAMES : cs_start_frame
+                                    + NUM_POST_CS_FRAMES
+                                ]
+                            )
+                            data_dict["probe_trial"].append(prob)
+                            data_dict["eye_pixels"].append(
+                                np.array(
+                                    eye_pix[
+                                        cs_start_frame
+                                        - NUM_PRE_CS_FRAMES : cs_start_frame
+                                        + NUM_POST_CS_FRAMES
+                                    ]
+                                )
+                            )
+                            data_dict["cs_start_frame"].append(NUM_PRE_CS_FRAMES)
+                            data_dict["trace_start_frame"].append(
+                                trace_start_frame - cs_start_frame + NUM_PRE_CS_FRAMES
+                            )
+                            data_dict["us_start_frame"].append(
+                                us_start_frame - cs_start_frame + NUM_PRE_CS_FRAMES
+                            )
+                            data_dict["post_start_frame"].append(
+                                post_start_frame - cs_start_frame + NUM_PRE_CS_FRAMES
+                            )
 
                     except Exception:
                         print(
@@ -253,7 +289,9 @@ def main(**kwargs):
 
                 for t in range(session["num_behaviour_trials"]):
                     if t + 1 in csv_error_trials:
-                        data_dict["fec"].append([np.nan] * NUM_MAX_FRAMES)
+                        data_dict["fec"].append(
+                            [np.nan] * (NUM_PRE_CS_FRAMES + NUM_POST_CS_FRAMES)
+                        )
                     else:
                         data_dict["fec"].append(
                             calc_frac_eye_closure(
@@ -274,13 +312,19 @@ def main(**kwargs):
 
                 data_df = pd.DataFrame(data_dict)
                 data_df[
-                    [f"timestamp_{f:03}" for f in range(NUM_MAX_FRAMES)]
+                    [
+                        f"timestamp_{f:03}"
+                        for f in range(NUM_PRE_CS_FRAMES + NUM_POST_CS_FRAMES)
+                    ]
                 ] = pd.DataFrame(
                     data_df.arduino_timestamp.tolist(), index=data_df.index
                 )
-                data_df[[f"fec_{f:03}" for f in range(NUM_MAX_FRAMES)]] = pd.DataFrame(
-                    data_df.fec.tolist(), index=data_df.index
-                )
+                data_df[
+                    [
+                        f"fec_{f:03}"
+                        for f in range(NUM_PRE_CS_FRAMES + NUM_POST_CS_FRAMES)
+                    ]
+                ] = pd.DataFrame(data_df.fec.tolist(), index=data_df.index)
                 data_df.drop(columns=["arduino_timestamp", "fec"], inplace=True)
                 data_df.to_csv(outfile, index=False)
 
