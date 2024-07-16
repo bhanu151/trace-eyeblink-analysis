@@ -130,6 +130,8 @@ def main(**kwargs):
                 "xmax:ymax": str,
                 "eye_threshold": int,
                 "num_behaviour_trials": int,
+                "skip_behaviour_trials": str,
+                "missing_behaviour_trials": str,
             },
         )
         if output_path == "":
@@ -137,6 +139,8 @@ def main(**kwargs):
         outpath = output_path + "/" + animal_name
         if not (os.path.isdir(outpath)):
             os.mkdir(outpath)
+
+        cumulative_df = pd.DataFrame()
 
         for _, session in csv_data.iterrows():
             session_name = (
@@ -161,8 +165,11 @@ def main(**kwargs):
                 csv_error_trials.update(
                     int(x) for x in session["missing_behaviour_trials"].split(";")
                 )
+            total_num_behaviour_trials = session["num_behaviour_trials"] + len(
+                csv_error_trials
+            )
 
-            if session["num_behaviour_trials"] - len(csv_error_trials) > 0:
+            if total_num_behaviour_trials > 0:
                 x_min, y_min = [int(i) for i in session["xmin:ymin"].split(":")]
                 x_max, y_max = [int(i) for i in session["xmax:ymax"].split(":")]
                 eye_coords = (x_min, y_min, x_max, y_max)
@@ -181,12 +188,12 @@ def main(**kwargs):
                 "arduino_timestamp": [],
                 "fec": [],
             }
-            data_dict["upi"] = [session["upi"]] * session["num_behaviour_trials"]
-            data_dict["protocol"] = [session["behaviour_code"]] * session[
-                "num_behaviour_trials"
-            ]
+            data_dict["upi"] = [session["upi"]] * total_num_behaviour_trials
+            data_dict["protocol"] = [
+                session["behaviour_code"]
+            ] * total_num_behaviour_trials
 
-            for t in range(session["num_behaviour_trials"]):
+            for t in range(total_num_behaviour_trials):
                 trial_video = session_path + f"/{(t+1):03}.tiff"
                 data_dict["trial_num"].append(t + 1)
                 if t + 1 in csv_error_trials:
@@ -283,11 +290,11 @@ def main(**kwargs):
                 min_eye_pixels = np.nanmin(
                     [
                         np.nanmin(data_dict["eye_pixels"][t])
-                        for t in np.arange(session["num_behaviour_trials"])
+                        for t in np.arange(total_num_behaviour_trials)
                     ]
                 )
 
-                for t in range(session["num_behaviour_trials"]):
+                for t in range(total_num_behaviour_trials):
                     if t + 1 in csv_error_trials:
                         data_dict["fec"].append(
                             [np.nan] * (NUM_PRE_CS_FRAMES + NUM_POST_CS_FRAMES)
@@ -311,34 +318,38 @@ def main(**kwargs):
                 )
 
                 data_df = pd.DataFrame(data_dict)
-                data_df[
+                data_df = pd.concat(
                     [
-                        f"timestamp_{f:03}"
-                        for f in range(NUM_PRE_CS_FRAMES + NUM_POST_CS_FRAMES)
-                    ]
-                ] = pd.DataFrame(
-                    data_df.arduino_timestamp.tolist(), index=data_df.index
+                        data_df,
+                        pd.DataFrame(
+                            data_df.arduino_timestamp.tolist(),
+                            columns=[
+                                f"timestamp_{f:03}"
+                                for f in range(NUM_PRE_CS_FRAMES + NUM_POST_CS_FRAMES)
+                            ],
+                            index=data_df.index,
+                        ),
+                    ],
+                    axis=1,
                 )
-                data_df[
+                data_df = pd.concat(
                     [
-                        f"fec_{f:03}"
-                        for f in range(NUM_PRE_CS_FRAMES + NUM_POST_CS_FRAMES)
-                    ]
-                ] = pd.DataFrame(data_df.fec.tolist(), index=data_df.index)
+                        data_df,
+                        pd.DataFrame(
+                            data_df.fec.tolist(),
+                            columns=[
+                                f"fec_{f:03}"
+                                for f in range(NUM_PRE_CS_FRAMES + NUM_POST_CS_FRAMES)
+                            ],
+                            index=data_df.index,
+                        ),
+                    ],
+                    axis=1,
+                )
                 data_df.drop(columns=["arduino_timestamp", "fec"], inplace=True)
                 data_df.to_csv(outfile, index=False)
 
-        cumulative_df = pd.concat(
-            [
-                pd.read_csv(
-                    output_path
-                    + f"/{animal_name}/{animal_name}_{session['upi']}_behaviour_data.csv",
-                    header=0,
-                )
-                for _, session in csv_data.iterrows()
-                if session["num_behaviour_trials"] > 0
-            ]
-        )
+            cumulative_df = pd.concat([cumulative_df, data_df], ignore_index=True)
         cumulative_df.to_csv(
             f"{output_path}/{animal_name}/{animal_name}_behaviour_data.csv", index=False
         )
