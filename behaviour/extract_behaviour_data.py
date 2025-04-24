@@ -12,6 +12,7 @@ from cv2 import medianBlur
 
 NUM_PRE_CS_FRAMES = 60
 NUM_POST_CS_FRAMES = 540
+NUM_PEAK_UR_FRAMES = 40
 MEDIAN_FILTER_SIZE = 5
 SAVGOL_WINDOW_SIZE = 10
 SAVGOL_POLYNOMIAL_ORDER = 2
@@ -106,16 +107,11 @@ def main(**kwargs):
     data_path = kwargs["data_path"]
     csv_path = kwargs["csv_path"]
     output_path = kwargs["output_path"]
-    ir_animals = kwargs["ir_animals"]
     animals = kwargs["animals"].split(",")
     animal_paths = [data_path + "/" + anim for anim in animals]
     for animal_path in animal_paths:
         animal_name = animal_path.split("/")[-1]
         print(animal_name)
-        if animal_name in ir_animals:
-            ir_flag = True
-        else:
-            ir_flag = False
         if not (os.path.isdir(animal_path)):
             print(f"{animal_name}'s data not found")
             continue
@@ -224,7 +220,7 @@ def main(**kwargs):
                             filter_size=MEDIAN_FILTER_SIZE,
                             savgol_window_size=SAVGOL_WINDOW_SIZE,
                             savgol_polynomial_order=SAVGOL_POLYNOMIAL_ORDER,
-                            is_white_eye=ir_flag,
+                            is_white_eye=session["white_eye"],
                         )
                         t_phase = np.array(t_phase)
                         cs_start_frame = np.where(t_phase == 2)[0][0]
@@ -289,8 +285,16 @@ def main(**kwargs):
             if not tiff_file_error:
                 min_eye_pixels = np.nanmin(
                     [
-                        np.nanmin(data_dict["eye_pixels"][t])
+                        np.nanmin(
+                            data_dict["eye_pixels"][t][
+                                data_dict["us_start_frame"][t] : data_dict[
+                                    "us_start_frame"
+                                ][t]
+                                + NUM_PEAK_UR_FRAMES
+                            ]
+                        )
                         for t in np.arange(total_num_behaviour_trials)
+                        if data_dict["us_start_frame"][t] is not np.nan
                     ]
                 )
 
@@ -384,13 +388,6 @@ if __name__ == "__main__":
         required=True,
         default="",
         help="Comma separated list of animals to analyze",
-    )
-    parser.add_argument(
-        "-i",
-        "--ir_animals",
-        required=False,
-        default="",
-        help="Comma separated list of animals imaged using IR camera",
     )
 
     args = parser.parse_args()
