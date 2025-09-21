@@ -124,7 +124,7 @@ def main(**kwargs):
                 "behaviour_session_number": str,
                 "xmin:ymin": str,
                 "xmax:ymax": str,
-                "eye_threshold": int,
+                "eye_threshold": "Int32",
                 "num_behaviour_trials": int,
                 "skip_behaviour_trials": str,
                 "missing_behaviour_trials": str,
